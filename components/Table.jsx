@@ -1,88 +1,117 @@
 /* eslint-disable react/jsx-key */
 
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTable, useSortBy } from 'react-table'
 import { toDigit } from './NumberDigits.jsx'
 import { toPercentage } from './NumberPercentage.jsx'
 import styles from 'styles/Table.module.css'
+import { useLocale } from 'hooks/useLocale.js'
+import { useTranslate } from 'hooks/useTranslate'
 
-export default function Table ({ data }) {
-  const locale = 'es'
+export default function Table ({ data, filter, setFilter, reportFound }) {
+  const { locale } = useLocale
+  const translate = useTranslate()
+
+  const handleRowClick = useCallback(
+    ({ original: { ccaa } }) => () => {
+      setFilter(ccaa === filter ? 'Totales' : ccaa)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    },
+    [filter, setFilter]
+  )
+
+  const formatDigit = number => toDigit({ locale, number })
+  const formatPercentage = number => toPercentage({ locale, number })
 
   const tableData = useMemo(
-    () => data.map(row => {
-      const {
-        dosisAdministradas,
-        dosisEntregadas,
-        dosisEntregadasModerna,
-        dosisEntregadasPfizer,
-        dosisPautaCompletada,
-        porcentajeEntregadas,
-        porcentajePoblacionAdministradas,
-        porcentajePoblacionCompletas,
-        ...rest
-      } = row
+    () => reportFound !== undefined
+      ? reportFound.map(row => {
+          const {
+            dosisPautaCompletada,
+            porcentajeEntregadas,
+            porcentajePoblacionAdministradas,
+            porcentajePoblacionCompletas,
+            ...rest
+          } = row
 
-      const formatDigit = number => toDigit({ locale, number })
-      const formatPercentage = number => toPercentage({ locale, number })
+          return {
+            dosisPautaCompletada: !isNaN(dosisPautaCompletada) ? dosisPautaCompletada.toFixed(4) : 0,
+            porcentajeEntregadas: porcentajeEntregadas !== null ? porcentajeEntregadas.toFixed(4) : 0,
+            porcentajePoblacionAdministradas: porcentajePoblacionAdministradas !== null ? porcentajePoblacionAdministradas.toFixed(4) : 0,
+            porcentajePoblacionCompletas: porcentajePoblacionCompletas !== null ? porcentajePoblacionCompletas.toFixed(4) : 0,
+            ...rest
+          }
+        })
+      : data.map(row => {
+        const {
+          dosisPautaCompletada,
+          porcentajeEntregadas,
+          porcentajePoblacionAdministradas,
+          porcentajePoblacionCompletas,
+          ...rest
+        } = row
 
-      return {
-        ...rest,
-        dosisAdministradas: formatDigit(dosisAdministradas),
-        dosisEntregadas: formatDigit(dosisEntregadas),
-        dosisEntregadasModerna: formatDigit(dosisEntregadasModerna),
-        dosisEntregadasPfizer: formatDigit(dosisEntregadasPfizer),
-        dosisPautaCompletada: formatDigit(dosisPautaCompletada),
-        porcentajeEntregadas: formatPercentage(porcentajeEntregadas),
-        porcentajePoblacionAdministradas: formatPercentage(porcentajePoblacionAdministradas),
-        porcentajePoblacionCompletas: formatPercentage(porcentajePoblacionCompletas)
-      }
-    }), []
+        return {
+          dosisPautaCompletada: !isNaN(dosisPautaCompletada) ? dosisPautaCompletada.toFixed(4) : 0,
+          porcentajeEntregadas: porcentajeEntregadas !== null ? porcentajeEntregadas.toFixed(4) : 0,
+          porcentajePoblacionAdministradas: porcentajePoblacionAdministradas !== null ? porcentajePoblacionAdministradas.toFixed(4) : 0,
+          porcentajePoblacionCompletas: porcentajePoblacionCompletas !== null ? porcentajePoblacionCompletas.toFixed(4) : 0,
+          ...rest
+        }
+      }), [reportFound]
   )
 
   const columns = useMemo(
     () => [
       {
         Header: '',
-        accessor: 'ccaa'
+        accessor: 'ccaa',
+        format: (ccaa) => ccaa
       },
       {
-        Header: 'Dosis entregadas',
-        accessor: 'dosisEntregadas'
+        Header: translate.home.dosisEntregadas,
+        accessor: 'dosisEntregadas',
+        format: formatDigit
       },
       {
-        Header: 'Dosis administradas',
-        accessor: 'dosisAdministradas'
+        Header: translate.home.dosisAdministradas,
+        accessor: 'dosisAdministradas',
+        format: formatDigit
       },
       {
-        Header: '% sobre entregadas',
-        accessor: 'porcentajeEntregadas'
+        Header: translate.home.sobreEntregadas,
+        accessor: 'porcentajeEntregadas',
+        format: formatPercentage
       },
       {
-        Header: '% población vacunada',
-        accessor: 'porcentajePoblacionAdministradas'
+        Header: translate.home.poblacionVacunada,
+        accessor: 'porcentajePoblacionAdministradas',
+        format: formatPercentage
       },
       {
-        Header: 'Pauta completa',
+        Header: translate.home.pautaCompleta,
         accessor: 'dosisPautaCompletada',
-        format: 'digit'
+        format: formatDigit
       },
       {
-        Header: '% población totalmente vacunada',
+        Header: translate.home.poblacionTotalmenteVacunada,
         accessor: 'porcentajePoblacionCompletas',
-        format: 'percentatge'
+        format: formatPercentage
       }
     ],
-    []
+    [translate]
   )
 
-  const {
+  let {
     getTableProps,
     getTableBodyProps,
     headerGroups,
     rows,
     prepareRow
   } = useTable({ columns, data: tableData }, useSortBy)
+
+  // totales siempre en la ultima fila
+  rows = [...rows.filter(row => row.id !== '19'), rows.find(row => row.id === '19')]
 
   return (
     <div className={styles.container}>
@@ -108,17 +137,32 @@ export default function Table ({ data }) {
           ))}
         </thead>
         <tbody {...getTableBodyProps()}>
-          {rows.map(row => {
+          {rows.map((row, index) => {
             prepareRow(row)
+            const className = row.id === '19'
+              ? styles.totales
+              : row.original.ccaa === filter
+                ? styles.selected
+                : ''
+
             return (
-              <tr {...row.getRowProps()} className={row.id === '19' ? styles.totales : ''}>
+              <tr {...row.getRowProps()} className={className} onClick={handleRowClick(row)}>
                 {row.cells.map(cell => {
                   return (
                     <td {...cell.getCellProps()}>
-                      {cell.render('Cell')}
+                      {cell.column.format(cell.value)}
                     </td>
                   )
                 })}
+                <td className={styles.mobileData}>
+                  {row.cells.map((cell, index) => {
+                    return (
+                      <span key={index}>
+                        {index === 0 ? '' : `${headerGroups[0].headers[index].Header} - ${cell.column.format(cell.value)}`}
+                      </span>
+                    )
+                  })}
+                </td>
               </tr>
             )
           })}
